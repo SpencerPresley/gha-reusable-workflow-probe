@@ -1,0 +1,9 @@
+name: caller-sh
+on: {workflow_dispatch: {}}
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/impl-sh.yml
+    with:
+      runner_label: no-such-box-label

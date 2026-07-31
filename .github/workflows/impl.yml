@@ -1,0 +1,32 @@
+name: impl
+on:
+  workflow_call:
+    inputs:
+      runner_label: {required: true, type: string}
+      box:          {required: true, type: string}
+permissions:
+  contents: read
+jobs:
+  probe:
+    # T1 (CRITICAL): does runs-on read the inputs context from workflow_call?
+    runs-on: "${{ inputs.runner_label }}"
+    steps:
+      - name: report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "T1 PASS  runs-on resolved from a workflow_call input"
+          echo "         box input = ${{ inputs.box }}"
+          echo "T5       github.workflow   = ${{ github.workflow }}"
+          echo "T5       github.event_name = ${{ github.event_name }}"
+          echo "T5       github.sha        = ${{ github.sha }}"
+          echo "T5       github.ref        = ${{ github.ref }}"
+          echo "T5       github.job        = ${{ github.job }}"
+          [ -n "$GH_TOKEN" ] && echo "T7 PASS  github.token non-empty inside called workflow"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+          if git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $AUTH" \
+               ls-remote "https://github.com/${{ github.repository }}.git" HEAD >/dev/null 2>&1; then
+            echo "T7b PASS beast's extraheader git-auth pattern works from a called workflow"
+          else
+            echo "T7b FAIL extraheader auth did NOT work"; exit 1
+          fi
