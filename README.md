@@ -27,7 +27,8 @@ documentation prose.
   - [03 — Is a `type: choice` input legal with no `default`?](#03--is-a-type-choice-input-legal-with-no-default)
   - [04 — Can workflow-level `concurrency` read `inputs`?](#04--can-workflow-level-concurrency-read-inputs)
   - [05 — Is job-level `concurrency` allowed on a `uses:` job?](#05--is-job-level-concurrency-allowed-on-a-uses-job)
-  - [99 — The flow-mapping collision (deliberately broken)](#99--the-flow-mapping-collision-deliberately-broken)
+  - [98 / 99 — The flow-mapping collision (deliberately broken)](#98--99--the-flow-mapping-collision-deliberately-broken)
+  - [00 — The defense](#00--the-defense)
 - [Reading the signals](#reading-the-signals)
 - [File map](#file-map)
 - [What this repo is not](#what-this-repo-is-not)
@@ -64,6 +65,8 @@ the others.
 | 04 | Workflow-level `concurrency.group` reads `inputs` | ✅ **Yes** (block style) |
 | 05 | Job-level `concurrency` on a job whose body is `uses:` | ✅ **Yes**, expressions included |
 | 99 | `${{ … }}` inside a YAML **flow mapping** `{ … }` | ❌ **Never parses**, and fails with a misleading error |
+| 98 | Does a *push* make GitHub surface the real parse error? | ⚠️ It creates a failed **0-job** run — but the message is **web-UI only**, not in any API |
+| 00 | Can you get the truth locally, before pushing? | ✅ **Yes** — a plain YAML parse, or `actionlint`. Both name it correctly |
 
 ## Reproducing
 
@@ -77,6 +80,7 @@ gh workflow run 03-choice-input-no-default.yml      --repo $R   # expect HTTP 42
 gh workflow run 04-concurrency-workflow-level.yml   --repo $R
 gh workflow run 05-concurrency-job-level.yml        --repo $R
 gh workflow run 99-BROKEN-flow-mapping-collision.yml --repo $R  # expect HTTP 422
+gh workflow run 00-lint.yml                         --repo $R   # the defense
 
 gh workflow list --repo $R      # the fastest parse check — see "Reading the signals"
 ```
@@ -256,9 +260,9 @@ workflow cancel its own caller. Keep the groups distinct, or keep
 
 ---
 
-### 99 — The flow-mapping collision (deliberately broken)
+### 98 / 99 — The flow-mapping collision (deliberately broken)
 
-**File:** [`99-BROKEN-flow-mapping-collision.yml`](.github/workflows/99-BROKEN-flow-mapping-collision.yml) — **do not fix it, it's the exhibit**
+**Files:** [`99-BROKEN-flow-mapping-collision.yml`](.github/workflows/99-BROKEN-flow-mapping-collision.yml) (dispatch-only) and [`98-BROKEN-push-triggered.yml`](.github/workflows/98-BROKEN-push-triggered.yml) (push-triggered) — **do not fix them, they're the exhibit**
 
 This is the most useful thing in the repo, because the failure mode actively
 lies to you.
@@ -285,12 +289,85 @@ HTTP 422: Workflow does not have 'workflow_dispatch' trigger
 ```
 
 The trigger is plainly there in the file. The error is a downstream symptom of
-a document that never parsed, and it points you at the wrong line entirely.
-There is no error annotation anywhere in the Actions UI, because there is no
-run to annotate.
+a document that never parsed, and it names something entirely unrelated.
 
 Flow style is fine for expression-free YAML — `{required: true, type: string}`
 parses happily. It's only the `${{ … }}` that collides.
+
+**Does a push surface the truth?** Probe 98 is the same collision with a `push`
+trigger, so GitHub has a run to attach an error to. Result: **GitHub does create
+a failed run — with zero jobs** — but the message is not retrievable:
+
+```
+$ gh run view <id> --repo $R --log
+failed to get run log: log not found
+
+$ gh api repos/$R/actions/runs/<id>/logs
+HTTP 404
+```
+
+Nor is it in `check-runs` or their annotations — a 0-job run has no check-run to
+carry one. The real message exists **only in the web UI**. So you cannot build
+tooling on GitHub's own report, and you shouldn't try. Get the truth locally
+instead — see probe 00.
+
+One more wrinkle worth knowing: GitHub attempts to load **every** workflow file
+on a push, so a broken *dispatch-only* workflow still produces a failed 0-job
+run on unrelated pushes. A repo with a permanently-broken workflow shows a red
+mark on every commit, sourced from a file nobody touched.
+
+---
+
+### 00 — The defense
+
+**File:** [`00-lint.yml`](.github/workflows/00-lint.yml)
+
+Two layers, cheapest first. Both name the problem correctly, which is the entire
+point — neither repeats GitHub's misdirection.
+
+**Layer 1 — plain YAML parse.** No dependencies beyond a YAML library, runs in
+milliseconds, and works identically as a pre-commit hook or a CI step:
+
+```
+  ok    .github/workflows/01-runs-on-from-workflow-call.yml
+  ...
+  YAML  .github/workflows/98-BROKEN-push-triggered.yml
+          expected ',' or '}', but got '{'  (line 11, col 37)
+  YAML  .github/workflows/99-BROKEN-flow-mapping-collision.yml
+          expected ',' or '}', but got '{'  (line 18, col 32)
+
+2 file(s) failed to parse
+```
+
+Both broken files caught, exact line and column, zero false positives across the
+eight valid ones.
+
+**Layer 2 — [`actionlint`](https://github.com/rhysd/actionlint).** Same verdict,
+plus a source-annotated caret, and it goes far beyond YAML validity — expression
+syntax, context availability per key, runner-label checks, and `shellcheck` over
+every `run:` block:
+
+```
+.github/workflows/99-BROKEN-flow-mapping-collision.yml:17:13: could not parse as YAML:
+did not find expected ',' or '}' [syntax-check]
+   |
+17 |       box: {required: true, type: string, default: alpha}
+   |             ^~~~~~~~~
+```
+
+Installs in one line with no system dependency, so it costs nothing to add:
+
+```bash
+bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+./actionlint
+```
+
+Note that neither tool's caret lands exactly on the `${{`. A flow-mapping error
+surfaces where the parser gives up, which can be the *enclosing* construct — here
+actionlint points a line early. That's fine in practice: `expected ',' or '}'`
+unambiguously means "flow mapping", and once you know that, you scan nearby lines
+for `{`. Ten seconds, versus an hour spent looking for a trigger that was never
+missing.
 
 ---
 
@@ -317,11 +394,16 @@ Summary of the three signals worth knowing:
 | Dispatch → `HTTP 404: not found on the default branch` | The workflow isn't on the default branch |
 | Dispatch → `HTTP 422: Required input '<x>' not provided` | A `required: true` input with no default — working as intended |
 | Run created, job stays `queued` | Syntax fine; no runner matches the labels |
+| A failed run with **0 jobs** | A parse failure. The message is web-UI only — `--log` returns `log not found` |
+
+Don't build tooling on any of these. They're for reading a red mark you're
+already looking at; the parse check in probe 00 is what you actually gate on.
 
 ## File map
 
 ```
 .github/workflows/
+  00-lint.yml                            THE DEFENSE — YAML parse + actionlint
   _reusable.yml                          shared reusable workflow (all probes call it)
   _reusable-selfhosted.yml               same, but targets a self-hosted label array
   01-runs-on-from-workflow-call.yml      runs-on from inputs; local uses:; github ctx; token
@@ -329,8 +411,13 @@ Summary of the three signals worth knowing:
   03-choice-input-no-default.yml         mandatory choice input with no default
   04-concurrency-workflow-level.yml      workflow-level concurrency reading inputs
   05-concurrency-job-level.yml           job-level concurrency on a uses: job
+  98-BROKEN-push-triggered.yml           deliberate negative case — leave broken
   99-BROKEN-flow-mapping-collision.yml   deliberate negative case — leave broken
 ```
+
+The two `BROKEN` files make every push to this repo produce two failed 0-job
+runs. That is intentional — it's the exhibit for the last row of the signals
+table above.
 
 ## What this repo is not
 
