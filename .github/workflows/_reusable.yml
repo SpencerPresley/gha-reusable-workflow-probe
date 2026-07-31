@@ -1,0 +1,38 @@
+# Shared reusable workflow. Every numbered probe below calls THIS file.
+# Its job deliberately takes the runner label as an input so probe 01 can
+# prove `runs-on` is able to read the `inputs` context under `workflow_call`.
+name: _reusable
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      box:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: "${{ inputs.runner_label }}"
+    steps:
+      - name: report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "PASS  runs-on resolved from a workflow_call input"
+          echo "      box input           = ${{ inputs.box }}"
+          echo "      github.workflow     = ${{ github.workflow }}   <- CALLER's name"
+          echo "      github.job          = ${{ github.job }}        <- CALLED workflow's job id"
+          echo "      github.event_name   = ${{ github.event_name }}"
+          echo "      github.sha          = ${{ github.sha }}"
+          echo "      github.ref          = ${{ github.ref }}"
+          [ -n "$GH_TOKEN" ] && echo "PASS  github.token is non-empty inside the called workflow"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+          if git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $AUTH" \
+               ls-remote "https://github.com/${{ github.repository }}.git" HEAD >/dev/null 2>&1; then
+            echo "PASS  the ephemeral-token extraheader git-auth pattern works here"
+          else
+            echo "FAIL  extraheader auth did not work"; exit 1
+          fi

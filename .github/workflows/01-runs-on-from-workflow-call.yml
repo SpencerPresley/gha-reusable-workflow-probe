@@ -1,0 +1,21 @@
+# PROBE 01 - Can `runs-on` read the `inputs` context under `workflow_call`?
+# Also covers: local `uses: ./...`, github-context identity, github.token.
+name: 01-runs-on-from-workflow-call
+on:
+  workflow_dispatch:
+    inputs:
+      box:
+        required: true
+        type: string
+        default: alpha
+concurrency:
+  group: probe-01
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/_reusable.yml
+    with:
+      runner_label: ubuntu-latest
+      box: ${{ inputs.box }}

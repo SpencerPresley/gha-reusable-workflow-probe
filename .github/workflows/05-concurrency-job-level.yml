@@ -1,0 +1,21 @@
+# PROBE 05 - Is JOB-level `concurrency` supported on a job whose body is
+# `uses:` (a reusable-workflow call), and can its group read `inputs`?
+name: 05-concurrency-job-level
+on:
+  workflow_dispatch:
+    inputs:
+      box:
+        required: true
+        type: string
+        default: alpha
+permissions:
+  contents: read
+jobs:
+  call:
+    concurrency:
+      group: probe-05-${{ inputs.box }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/_reusable.yml
+    with:
+      runner_label: ubuntu-latest
+      box: ${{ inputs.box }}

@@ -1,9 +1,0 @@
-name: caller-conc-joblevel-literal
-on: {workflow_dispatch: {}}
-permissions:
-  contents: read
-jobs:
-  call:
-    concurrency: {group: probe-job-literal, cancel-in-progress: false}
-    uses: ./.github/workflows/impl.yml
-    with: {runner_label: ubuntu-latest, box: literal}

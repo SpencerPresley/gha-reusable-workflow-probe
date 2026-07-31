@@ -1,0 +1,17 @@
+# Same idea, but the job targets a self-hosted runner via the ARRAY form.
+# No runner in this repo carries the label, so a dispatch that reaches the
+# queue proves the syntax was accepted (the job then waits forever).
+name: _reusable-selfhosted
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: [self-hosted, "${{ inputs.runner_label }}"]
+    steps:
+      - run: echo "unreachable - no runner carries this label"

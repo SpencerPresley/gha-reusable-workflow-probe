@@ -1,0 +1,21 @@
+# PROBE 04 - Can WORKFLOW-level `concurrency.group` read `inputs`?
+# Note the BLOCK style - see probe 99 for why that matters.
+name: 04-concurrency-workflow-level
+on:
+  workflow_dispatch:
+    inputs:
+      box:
+        required: true
+        type: string
+        default: alpha
+concurrency:
+  group: probe-04-${{ inputs.box }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/_reusable.yml
+    with:
+      runner_label: ubuntu-latest
+      box: ${{ inputs.box }}

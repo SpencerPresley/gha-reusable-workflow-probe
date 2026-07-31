@@ -1,0 +1,21 @@
+# PROBE 03 - Is a `type: choice` input legal with NO `default`, and is it
+# then genuinely mandatory? Dispatch WITHOUT `-f box=` to see the rejection.
+name: 03-choice-input-no-default
+on:
+  workflow_dispatch:
+    inputs:
+      box:
+        description: which target
+        required: true
+        type: choice
+        options:
+          - alpha
+          - bravo
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/_reusable.yml
+    with:
+      runner_label: ubuntu-latest
+      box: ${{ inputs.box }}

@@ -1,0 +1,26 @@
+# PROBE 99 - DELIBERATELY BROKEN. Do not fix.
+#
+# `${{ ... }}` placed inside a YAML FLOW MAPPING `{ ... }`. The `{{` and `}}`
+# collide with the flow mapping's structural braces, so the file never parses.
+#
+# The failure is SILENT and badly signposted:
+#   * `gh workflow list` shows this file by PATH instead of by `name:`
+#   * dispatching it returns
+#       HTTP 422: Workflow does not have 'workflow_dispatch' trigger
+#     ...which is a lie. The trigger is right there - the file just never parsed.
+#
+# Fix = write the expression in BLOCK style (see probe 04).
+name: 99-BROKEN-flow-mapping-collision
+on:
+  workflow_dispatch:
+    inputs:
+      box: {required: true, type: string, default: alpha}
+concurrency: {group: probe-99-${{ inputs.box }}, cancel-in-progress: false}
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/_reusable.yml
+    with:
+      runner_label: ubuntu-latest
+      box: ${{ inputs.box }}

@@ -1,0 +1,13 @@
+# PROBE 02 - Does `runs-on: [self-hosted, "<expr>"]` parse under workflow_call?
+# Expected: run is CREATED and the job sits QUEUED (no matching runner).
+# Queued == syntax accepted. Cancel it afterwards.
+name: 02-self-hosted-label-expression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/_reusable-selfhosted.yml
+    with:
+      runner_label: no-such-runner-label
