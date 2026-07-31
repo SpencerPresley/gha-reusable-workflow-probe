@@ -1,0 +1,33 @@
+# The DEFENSE. Two layers, cheapest first.
+name: 00-lint
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: "Layer 1 - plain YAML parse (catches the flow-mapping collision with line/col)"
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          bad = 0
+          for f in sorted(glob.glob(".github/workflows/*.yml")):
+              try:
+                  yaml.safe_load(open(f))
+                  print(f"  ok    {f}")
+              except yaml.YAMLError as e:
+                  bad += 1
+                  mark = getattr(e, "problem_mark", None)
+                  loc = f"line {mark.line+1}, col {mark.column+1}" if mark else "?"
+                  print(f"  YAML  {f}\n          {getattr(e,'problem',e)}  ({loc})")
+          print(f"\n{bad} file(s) failed to parse")
+          PY
+      - name: "Layer 2 - actionlint (expression syntax, context availability, shellcheck)"
+        run: |
+          bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) >/dev/null
+          ./actionlint -color -no-color 2>&1 | head -60 || true
+          echo "--- actionlint exit: ${PIPESTATUS[0]:-?} ---"

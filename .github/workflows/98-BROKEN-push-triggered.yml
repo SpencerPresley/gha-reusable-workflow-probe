@@ -1,0 +1,13 @@
+# PROBE 98 - DELIBERATELY BROKEN, same collision as probe 99, but push-triggered.
+# Probe 99 can only be reached via dispatch, which returns a misleading error.
+# This one gives GitHub a run to attach an annotation to - does the annotation
+# tell the truth?
+name: 98-BROKEN-push-triggered
+on: {push: {branches: [main]}}
+permissions:
+  contents: read
+jobs:
+  broken:
+    runs-on: {group: ubuntu-latest-${{ github.ref_name }}}
+    steps:
+      - run: echo unreachable
