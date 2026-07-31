@@ -1,0 +1,19 @@
+name: conc-wf-inputs
+on:
+  workflow_dispatch:
+    inputs:
+      box:
+        required: true
+        type: string
+        default: beast
+concurrency:
+  group: probe-wf-${{ inputs.box }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  call:
+    uses: ./.github/workflows/impl.yml
+    with:
+      runner_label: ubuntu-latest
+      box: ${{ inputs.box }}
